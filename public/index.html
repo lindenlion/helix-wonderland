@@ -1,0 +1,173 @@
+<title>Helix in Wonderland (Elm)</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&family=VT323&display=swap">
+<style>
+/* Layout: Helix-terminal frame (default "revolver" theme colours) around a 5:3 pixel stage, then panel, status line, keyboard.
+   One deliberate dark look, so no light theme. */
+:root{
+  color-scheme: dark;
+  --deep:#1a0f22; --revolver:#281733; --midnight:#3b224c; --plum:#4d2d63;
+  --lilac:#dbbfef; --lavender:#a4a0e8; --muted:#9a86b0;
+  --honey:#efba5d; --mint:#9ff28f; --apricot:#f47868; --ink:#120a18;
+  --display:'Silkscreen', ui-monospace, monospace;
+  --body:'Pixelify Sans', system-ui, sans-serif;
+  --mono:'VT323', ui-monospace, monospace;
+  --key: clamp(22px, 6vw, 46px);
+}
+html,body{background:var(--deep);color:var(--lilac)}
+body{font-family:var(--body);font-size:16px;line-height:1.45}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--honey);outline-offset:2px}
+kbd{font-family:var(--mono);font-size:1.15em;background:var(--midnight);border-bottom:2px solid var(--ink);padding:0 .35em;color:var(--lilac)}
+p{margin:0}
+
+.app{max-width:980px;margin:0 auto;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));padding-block:14px 28px;display:flex;flex-direction:column;gap:12px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.brand{font-family:var(--display);font-size:13px;color:var(--lavender);letter-spacing:.04em}
+.brand b{color:var(--honey);font-weight:400}
+.settings{display:flex;flex-wrap:wrap;gap:8px}
+.segmented{display:inline-flex;border:2px solid var(--plum);background:var(--revolver)}
+.segmented button,.plain{background:transparent;border:0;color:var(--muted);font-family:var(--display);font-size:11px;padding:6px 8px;letter-spacing:.04em}
+.segmented button[aria-pressed="true"]{background:var(--plum);color:var(--lilac)}
+.plain{border:2px solid var(--plum);background:var(--revolver)}
+.segmented button:hover,.plain:hover{color:var(--lilac)}
+
+.stage{position:relative;background:var(--ink);box-shadow:0 0 0 3px var(--ink),0 0 0 6px var(--plum);overflow:hidden}
+.stage-scene{position:relative}
+.pixel-scene{display:block;width:100%;height:auto;aspect-ratio:5/3;max-width:100%;shape-rendering:crispEdges}
+.pixel-label{font-family:var(--mono);font-size:12px;fill:var(--ink)}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(18,10,24,.66);overflow:auto;padding:16px}
+.card{background:var(--revolver);border:3px solid var(--plum);box-shadow:6px 6px 0 var(--ink);padding:20px 22px;max-width:580px;width:100%;display:flex;flex-direction:column;gap:12px}
+.logo{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(22px,4.4vw,40px);line-height:1.1;text-shadow:3px 3px 0 #540099;text-wrap:balance}
+.logo-accent{color:var(--honey)}
+.logo small{font-size:.55em;color:var(--lavender)}
+.tagline{color:var(--muted);max-width:60ch}
+.notice{font-size:14px;color:var(--honey);border-left:3px solid var(--honey);padding-left:8px}
+.chapters{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.chapters li{display:grid;grid-template-columns:2.2em 1fr auto;gap:10px;align-items:center;padding:7px 10px;border:2px solid transparent;cursor:pointer}
+.chapters li.selected{border-color:var(--honey);background:var(--midnight)}
+.chapters li.unavailable{opacity:.5}
+.chapter-number{font-family:var(--display);color:var(--honey);font-size:18px}
+.chapter-text{min-width:0}
+.chapter-name{font-weight:600;display:block}
+.chapter-skill{font-size:14px;color:var(--muted);display:block}
+.chapter-status{font-family:var(--display);font-size:9px;color:var(--muted);text-align:right;max-width:9em}
+.hint,.eyebrow{font-family:var(--display);font-size:11px;color:var(--lavender);letter-spacing:.04em}
+h2{margin:0;font-family:var(--display);font-weight:400;font-size:22px}
+.tarts{display:inline-flex;gap:4px;align-items:center}
+.tart{display:block;width:20px;height:12px}
+.tarts.large{gap:10px}
+.tarts.large .tart{width:56px;height:34px}
+.tart.dim{opacity:.2;filter:grayscale(1)}
+.lesson{font-family:var(--mono);font-size:22px;color:var(--honey)}
+.stats{display:flex;flex-wrap:wrap;gap:8px 20px;font-family:var(--display);font-size:10px;letter-spacing:.05em;color:var(--muted);text-transform:uppercase}
+.stats b{display:block;font-family:var(--mono);font-weight:400;font-size:24px;color:var(--lilac);text-transform:none;letter-spacing:0;font-variant-numeric:tabular-nums}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.actions button{background:var(--midnight);border:2px solid var(--plum);padding:8px 12px;font-family:var(--display);font-size:11px}
+.actions button.primary{background:var(--honey);color:var(--ink);border-color:var(--honey)}
+
+.dialog{position:absolute;left:12px;right:12px;bottom:12px;background:var(--revolver);border:3px solid var(--lilac);box-shadow:4px 4px 0 var(--ink);display:flex;gap:12px;padding:10px 12px;align-items:flex-start}
+.dialog-portrait{width:48px;height:48px;flex:none;background:var(--midnight);shape-rendering:crispEdges}
+.dialog-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.dialog-speaker{font-family:var(--display);font-size:11px;color:var(--honey);letter-spacing:.08em;text-transform:uppercase}
+.dialog-text{font-size:clamp(15px,1.9vw,19px);min-height:2.9em}
+.dialog-next{align-self:flex-end;font-family:var(--display);font-size:10px;color:var(--lavender);animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
+.toast{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:var(--honey);color:var(--ink);font-family:var(--display);font-size:11px;padding:6px 10px;max-width:90%;box-shadow:3px 3px 0 var(--ink);text-align:center}
+
+.panel{background:var(--revolver);border-left:4px solid var(--lavender);padding:12px 14px;min-height:64px}
+.panel-content{display:flex;flex-direction:column;gap:8px}
+.legend{font-family:var(--mono);font-size:26px;display:flex;flex-wrap:wrap;gap:4px 18px}
+.legend b{color:var(--honey);font-weight:400}
+.big{font-size:18px}
+.tip{color:var(--honey)}
+
+.status-line{display:flex;flex-wrap:wrap;background:var(--midnight);font-family:var(--mono);font-size:20px;line-height:1.35}
+.status-line>span{padding:0 10px;white-space:nowrap}
+.status-mode{background:var(--lavender);color:var(--ink)}
+.status-mode.insert{background:var(--mint)}
+.status-gap{flex:1}
+.status-keys{color:var(--honey)}
+
+.keyboard-area{display:flex;flex-direction:column;gap:6px;align-items:center}
+.keyboard{display:flex;flex-direction:column;gap:4px;max-width:100%;overflow-x:auto;padding-top:4px}
+.key-row{display:flex;gap:4px}
+.key{--finger:#c8c0dc;width:var(--key);height:var(--key);flex:none;display:grid;place-items:center;font-family:var(--mono);font-size:calc(var(--key)*.55);background:color-mix(in srgb,var(--finger) 18%,var(--midnight));border-bottom:3px solid color-mix(in srgb,var(--finger) 55%,var(--ink));color:var(--lilac);position:relative;user-select:none}
+.key.bump::after{content:"";position:absolute;bottom:18%;left:38%;right:38%;height:2px;background:currentColor;opacity:.7}
+.key.wide{width:calc(var(--key)*1.5);font-size:calc(var(--key)*.4)}
+.key.space{width:calc(var(--key)*6 + 20px);font-size:calc(var(--key)*.36)}
+.key.helper{box-shadow:inset 0 0 0 2px var(--lavender)}
+.key.target{background:var(--finger);color:var(--ink);transform:translateY(-3px)}
+.key.hit{background:var(--mint);color:var(--ink)}
+.key.miss{background:var(--apricot);color:var(--ink)}
+.spacer{flex:none}
+.f0{--finger:#e88aa8}.f1{--finger:#f0a868}.f2{--finger:#e6d36a}.f3{--finger:#8fd694}.f4{--finger:#6cc7c0}.f5{--finger:#7fa7f0}.f6{--finger:#b294f0}.f7{--finger:#e58ae0}.f8{--finger:#c8c0dc}
+.finger-hint{font-family:var(--display);font-size:11px;letter-spacing:.04em;color:var(--muted);text-align:center}
+.footer{font-size:13px;color:var(--muted)}
+#focus-prompt{position:fixed;left:50%;bottom:max(16px, env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--lilac);color:var(--ink);border:0;font-family:var(--display);font-size:11px;padding:10px 14px;box-shadow:3px 3px 0 var(--ink);z-index:10;max-width:90%}
+@media (max-width:760px){.overlay{position:static;background:var(--revolver);padding:12px}.card{box-shadow:none;border:0;padding:4px}.stage-scene:has(.overlay)>.pixel-scene{display:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="app"></div>
+<button id="focus-prompt" hidden>Click to play · Klicken zum Spielen</button>
+
+<!-- ELM -->
+
+<script>
+/* The JavaScript side of the ports in src/Ports.elm. Kept small on purpose:
+   saving to the browser, and a tiny synthesiser for sound effects. */
+(function () {
+  const load = (key) => { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } };
+  const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} };
+
+  const app = Elm.Main.init({
+    node: document.getElementById('app'),
+    flags: {
+      browserLanguage: navigator.language || 'en',
+      settings: load('helix-wonderland.settings'),
+      progress: load('helix-wonderland.progress')
+    }
+  });
+
+  app.ports.saveSettings.subscribe((value) => save('helix-wonderland.settings', value));
+  app.ports.saveProgress.subscribe((value) => save('helix-wonderland.progress', value));
+
+  let audio = null;
+  function beep(frequency, seconds, type = 'square', volume = 0.045) {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audio.createOscillator(), gain = audio.createGain(), now = audio.currentTime;
+      osc.type = type; osc.frequency.value = frequency;
+      gain.gain.setValueAtTime(volume, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(now); osc.stop(now + seconds + 0.02);
+    } catch (e) {}
+  }
+  const sounds = {
+    step:   () => beep(330, 0.03, 'triangle', 0.03),
+    tick:   () => beep(520, 0.02, 'triangle', 0.02),
+    bump:   () => beep(100, 0.09, 'square', 0.035),
+    error:  () => beep(140, 0.13, 'sawtooth', 0.035),
+    pickup: () => { beep(988, 0.08); setTimeout(() => beep(1318, 0.12), 80); },
+    fanfare:() => [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.13), i * 110))
+  };
+  app.ports.playSound.subscribe((name) => (sounds[name] || (() => {}))());
+
+  // Stop the page from scrolling or button-clicking on keys the game uses.
+  const gameKeys = new Set([' ', 'Backspace', 'Tab', 'Enter', '/', "'", 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+  window.addEventListener('keydown', (e) => { if (gameKeys.has(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault(); });
+  document.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && b.id !== 'focus-prompt') b.blur(); });
+
+  // Inside an embedded frame the game only hears keys after a click.
+  const prompt = document.getElementById('focus-prompt');
+  const updateFocus = () => { prompt.hidden = document.hasFocus(); };
+  window.addEventListener('focus', updateFocus);
+  window.addEventListener('blur', updateFocus);
+  document.addEventListener('mousedown', () => { window.focus(); setTimeout(updateFocus, 50); });
+  prompt.addEventListener('click', () => { window.focus(); setTimeout(updateFocus, 50); });
+  updateFocus();
+})();
+</script>

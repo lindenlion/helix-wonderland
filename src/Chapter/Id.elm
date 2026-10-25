@@ -1,0 +1,73 @@
+module Chapter.Id exposing (ChapterId(..), all, isPorted, next, number, toKey)
+
+{-| The chapters of the game, in playing order.
+-}
+
+
+type ChapterId
+    = RabbitHole
+    | HallOfDoors
+    | DrinkMe
+    | PoolOfTears
+    | Caterpillar
+
+
+all : List ChapterId
+all =
+    [ RabbitHole, HallOfDoors, DrinkMe, PoolOfTears, Caterpillar ]
+
+
+{-| 1-based, as shown on the title screen.
+-}
+number : ChapterId -> Int
+number id =
+    case id of
+        RabbitHole ->
+            1
+
+        HallOfDoors ->
+            2
+
+        DrinkMe ->
+            3
+
+        PoolOfTears ->
+            4
+
+        Caterpillar ->
+            5
+
+
+{-| Stable name for saving progress. Never change these: saved games use them.
+-}
+toKey : ChapterId -> String
+toKey id =
+    case id of
+        RabbitHole ->
+            "rabbit-hole"
+
+        HallOfDoors ->
+            "hall-of-doors"
+
+        DrinkMe ->
+            "drink-me"
+
+        PoolOfTears ->
+            "pool-of-tears"
+
+        Caterpillar ->
+            "caterpillar"
+
+
+{-| Chapters already rebuilt in Elm. The others still live in the prototype.
+-}
+isPorted : ChapterId -> Bool
+isPorted id =
+    id == HallOfDoors
+
+
+next : ChapterId -> Maybe ChapterId
+next id =
+    all
+        |> List.filter (\other -> number other == number id + 1)
+        |> List.head

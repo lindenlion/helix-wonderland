@@ -1,0 +1,20 @@
+{
+  "name": "helix-wonderland",
+  "version": "0.2.0",
+  "description": "Learn the Helix editor and ten-finger typing in Alice's Wonderland. Elm.",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "elm-test",
+    "review": "elm-review",
+    "format": "elm-format --yes src tests review/src",
+    "check": "elm-format --validate src tests review/src && elm-review && elm-test"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "elm": "^0.19.1-5",
+    "elm-format": "^0.8.8",
+    "elm-review": "^2.13.5",
+    "elm-test": "^0.19.1-revision12"
+  },
+  "private": true
+}

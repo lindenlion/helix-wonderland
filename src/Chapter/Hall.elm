@@ -1,0 +1,789 @@
+module Chapter.Hall exposing (Model, Msg(..), backdrop, init, update, view)
+
+{-| Chapter 2, "The Hall of Doors": Alice walks with `h j k l`, finds the
+golden key, then learns counts (`8l`) on the way to the little curtain.
+
+Read top to bottom: the map, the tunable numbers, the model, `update`, then
+the view. Everything here is pure; sounds, toasts and the end of the chapter
+are requested as `Effect`s for `Main` to carry out.
+
+-}
+
+import Array exposing (Array)
+import Chapter.Contract as Contract exposing (Context, Effect(..), Sound(..))
+import Chapter.Hall.Tiles as Tiles exposing (Tile(..))
+import Html exposing (Html)
+import Html.Attributes as HA
+import Keyboard.Layout as Layout
+import Pixel.Sprite as Sprite
+import Pixel.Sprites as Sprites
+import Speaker exposing (Speaker(..))
+import Svg exposing (Svg)
+import Svg.Attributes as SA
+import Svg.Lazy
+import Texts exposing (Texts)
+import Ui.Dialog as Dialog exposing (Dialog)
+
+
+file : String
+file =
+    "02_hall_of_doors.txt"
+
+
+
+-- MAP
+--
+-- Legend: # wall, D door, C curtain (with c in front of it, the goal),
+-- T glass table, P pillar, K golden key, S start, . floor.
+-- The shortest solution with counts is 5k 8l 9l 5j: eight keystrokes.
+
+
+plan : List String
+plan =
+    [ "####D####D####D#####"
+    , "#..................#"
+    , "#..PP..........PP..#"
+    , "#..PP...TTT....PP..#"
+    , "#.......TTT........#"
+    , "#........K.........#"
+    , "#..................#"
+    , "D....PP......PP....D"
+    , "#....PP......PP....#"
+    , "#..................#"
+    , "#S................c#"
+    , "#####D#######D####C#"
+    ]
+
+
+type alias Map =
+    Array (Array Tile)
+
+
+type alias Point =
+    { x : Int, y : Int }
+
+
+parseMap : List String -> Map
+parseMap rows =
+    rows
+        |> List.map (String.toList >> List.map Tiles.fromChar >> Array.fromList)
+        |> Array.fromList
+
+
+tileAt : Point -> Map -> Tile
+tileAt { x, y } map =
+    Array.get y map
+        |> Maybe.andThen (Array.get x)
+        |> Maybe.withDefault Wall
+
+
+setTile : Point -> Tile -> Map -> Map
+setTile { x, y } tile map =
+    case Array.get y map of
+        Just row ->
+            Array.set y (Array.set x tile row) map
+
+        Nothing ->
+            map
+
+
+findTile : Tile -> Map -> Maybe Point
+findTile wanted map =
+    map
+        |> Array.toIndexedList
+        |> List.concatMap
+            (\( y, row ) ->
+                row
+                    |> Array.toIndexedList
+                    |> List.filter (\( _, tile ) -> tile == wanted)
+                    |> List.map (\( x, _ ) -> { x = x, y = y })
+            )
+        |> List.head
+
+
+
+-- TUNING
+
+
+stepMilliseconds : Float
+stepMilliseconds =
+    75
+
+
+bumpMilliseconds : Float
+bumpMilliseconds =
+    150
+
+
+{-| `99j` would take a while; counts are capped.
+-}
+largestCount : Int
+largestCount =
+    30
+
+
+{-| Keycap hints around Alice disappear after this many steps.
+-}
+stepsWithHints : Int
+stepsWithHints =
+    14
+
+
+fewestKeystrokes : Int
+fewestKeystrokes =
+    8
+
+
+keystrokesForThirdTart : Int
+keystrokesForThirdTart =
+    20
+
+
+rabbitPixelsPerMillisecond : Float
+rabbitPixelsPerMillisecond =
+    0.07
+
+
+
+-- MODEL
+
+
+type alias Model =
+    { map : Map
+    , alice : Point
+    , step : Maybe Step
+    , queuedSteps : List Direction
+    , pendingCount : String
+    , keystrokes : Int
+    , usedCount : Bool
+    , hasKey : Bool
+    , stepsTaken : Int
+    , rabbit : Rabbit
+    , phase : Phase
+    , dialog : Maybe Dialog
+    , bumpRemaining : Float
+    , clock : Float
+    }
+
+
+{-| Intro: story before playing. Exploring: walking around. Leaving: the
+closing story is showing. Done: the chapter has reported its score.
+-}
+type Phase
+    = Intro
+    | Exploring
+    | Leaving
+    | Done
+
+
+type Direction
+    = Left
+    | Down
+    | Up
+    | Right
+
+
+{-| The step Alice is animating: she already stands on the new tile in the
+model, and is drawn sliding from `from` towards it.
+-}
+type alias Step =
+    { from : Point
+    , progress : Float
+    }
+
+
+{-| The rabbit hurries off along its route once the intro story ends.
+Its position is in pixels, not tiles, so it can move smoothly.
+-}
+type alias Rabbit =
+    { x : Float
+    , y : Float
+    , route : List Point
+    , running : Bool
+    }
+
+
+init : Model
+init =
+    let
+        map =
+            parseMap plan
+    in
+    { map = map
+    , alice = findTile Start map |> Maybe.withDefault { x = 1, y = 10 }
+    , step = Nothing
+    , queuedSteps = []
+    , pendingCount = ""
+    , keystrokes = 0
+    , usedCount = False
+    , hasKey = False
+    , stepsTaken = 0
+    , rabbit = { x = 12 * 16, y = 16, route = [ { x = 13, y = 1 }, { x = 14, y = 1 }, { x = 14, y = 0 } ], running = False }
+    , phase = Intro
+    , dialog =
+        Just
+            (Dialog.start (Dialog.say Narrator (.hall >> .intro1))
+                [ Dialog.say WhiteRabbit (.hall >> .intro2)
+                , Dialog.say Narrator (.hall >> .intro3)
+                , Dialog.say Narrator (.hall >> .intro4)
+                ]
+            )
+    , bumpRemaining = 0
+    , clock = 0
+    }
+
+
+
+-- UPDATE
+
+
+type Msg
+    = KeyPressed String
+    | Frame Float
+
+
+update : Context -> Msg -> Model -> ( Model, List Effect )
+update context msg model =
+    case msg of
+        KeyPressed key ->
+            case model.dialog of
+                Just dialog ->
+                    if key == "Enter" || key == " " then
+                        continueDialog context.texts dialog model
+
+                    else
+                        ( model, [] )
+
+                Nothing ->
+                    if model.phase == Exploring then
+                        explore key model
+
+                    else
+                        ( model, [] )
+
+        Frame milliseconds ->
+            { model
+                | clock = model.clock + milliseconds
+                , bumpRemaining = max 0 (model.bumpRemaining - milliseconds)
+                , rabbit = moveRabbit milliseconds model.rabbit
+                , dialog = Maybe.map (Dialog.tick milliseconds) model.dialog
+            }
+                |> animateWalking milliseconds
+
+
+continueDialog : Texts -> Dialog -> Model -> ( Model, List Effect )
+continueDialog texts dialog model =
+    case Dialog.advance texts dialog of
+        Just next ->
+            ( { model | dialog = Just next }, [ PlaySound TickSound ] )
+
+        Nothing ->
+            let
+                closed =
+                    { model | dialog = Nothing }
+            in
+            case model.phase of
+                Intro ->
+                    ( { closed | phase = Exploring, rabbit = startRunning model.rabbit }, [] )
+
+                Leaving ->
+                    ( { closed | phase = Done }, [ Finish (score model) ] )
+
+                _ ->
+                    ( closed, [] )
+
+
+explore : String -> Model -> ( Model, List Effect )
+explore key model =
+    if String.startsWith "Arrow" key then
+        ( model, [ ShowToast (.hall >> .arrows), PlaySound ErrorSound ] )
+
+    else if isCountDigit key model.pendingCount then
+        ( { model | pendingCount = model.pendingCount ++ key, keystrokes = model.keystrokes + 1 }
+        , [ PlaySound TickSound ]
+        )
+
+    else if key == "Escape" then
+        ( { model | pendingCount = "" }, [] )
+
+    else
+        case directionFor key of
+            Just direction ->
+                walk key direction model
+
+            Nothing ->
+                if String.length key == 1 then
+                    ( model, [ FlashKey key False ] )
+
+                else
+                    ( model, [] )
+
+
+{-| A digit starts or extends a count, but a count can't start with 0.
+-}
+isCountDigit : String -> String -> Bool
+isCountDigit key pendingCount =
+    String.length key == 1 && String.all Char.isDigit key && not (key == "0" && pendingCount == "")
+
+
+directionFor : String -> Maybe Direction
+directionFor key =
+    case key of
+        "h" ->
+            Just Left
+
+        "j" ->
+            Just Down
+
+        "k" ->
+            Just Up
+
+        "l" ->
+            Just Right
+
+        _ ->
+            Nothing
+
+
+walk : String -> Direction -> Model -> ( Model, List Effect )
+walk key direction model =
+    let
+        count =
+            String.toInt model.pendingCount
+                |> Maybe.withDefault 1
+                |> clamp 1 largestCount
+    in
+    ( { model
+        | queuedSteps = model.queuedSteps ++ List.repeat count direction
+        , pendingCount = ""
+        , keystrokes = model.keystrokes + 1
+        , usedCount = model.usedCount || count > 1
+      }
+    , [ FlashKey key True ]
+    )
+
+
+animateWalking : Float -> Model -> ( Model, List Effect )
+animateWalking milliseconds model =
+    case model.step of
+        Just step ->
+            let
+                progress =
+                    step.progress + milliseconds / stepMilliseconds
+            in
+            if progress >= 1 then
+                arrive { model | step = Nothing }
+
+            else
+                ( { model | step = Just { step | progress = progress } }, [] )
+
+        Nothing ->
+            if isTalking model then
+                ( model, [] )
+
+            else
+                startNextStep model
+
+
+startNextStep : Model -> ( Model, List Effect )
+startNextStep model =
+    case model.queuedSteps of
+        direction :: rest ->
+            let
+                target =
+                    neighbour direction model.alice
+            in
+            if Tiles.isWalkable (tileAt target model.map) then
+                ( { model
+                    | alice = target
+                    , step = Just { from = model.alice, progress = 0 }
+                    , queuedSteps = rest
+                    , stepsTaken = model.stepsTaken + 1
+                  }
+                , [ PlaySound StepSound ]
+                )
+
+            else
+                ( { model | queuedSteps = [], bumpRemaining = bumpMilliseconds }, [ PlaySound BumpSound ] )
+
+        [] ->
+            ( model, [] )
+
+
+{-| What happens when Alice finishes a step onto a tile.
+-}
+arrive : Model -> ( Model, List Effect )
+arrive model =
+    case tileAt model.alice model.map of
+        GoldenKey ->
+            ( { model
+                | hasKey = True
+                , map = setTile model.alice Floor model.map
+                , queuedSteps = []
+                , dialog =
+                    Just
+                        (Dialog.start (Dialog.say Alice (.hall >> .keyFound))
+                            [ Dialog.say Narrator (.hall >> .countLesson) ]
+                        )
+              }
+            , [ PlaySound PickupSound ]
+            )
+
+        CurtainFront ->
+            if model.hasKey then
+                ( { model
+                    | phase = Leaving
+                    , queuedSteps = []
+                    , dialog = Just (Dialog.start (Dialog.say Narrator (.hall >> .finale)) [])
+                  }
+                , [ PlaySound PickupSound ]
+                )
+
+            else
+                ( { model | queuedSteps = [] }, [ ShowToast (.hall >> .locked) ] )
+
+        _ ->
+            ( model, [] )
+
+
+neighbour : Direction -> Point -> Point
+neighbour direction { x, y } =
+    case direction of
+        Left ->
+            { x = x - 1, y = y }
+
+        Right ->
+            { x = x + 1, y = y }
+
+        Up ->
+            { x = x, y = y - 1 }
+
+        Down ->
+            { x = x, y = y + 1 }
+
+
+isTalking : Model -> Bool
+isTalking model =
+    case model.dialog of
+        Just _ ->
+            True
+
+        Nothing ->
+            False
+
+
+startRunning : Rabbit -> Rabbit
+startRunning rabbit =
+    { rabbit | running = True }
+
+
+moveRabbit : Float -> Rabbit -> Rabbit
+moveRabbit milliseconds rabbit =
+    case ( rabbit.running, rabbit.route ) of
+        ( True, target :: rest ) ->
+            let
+                dx =
+                    toFloat (target.x * Tiles.size) - rabbit.x
+
+                dy =
+                    toFloat (target.y * Tiles.size) - rabbit.y
+
+                distance =
+                    sqrt (dx * dx + dy * dy)
+
+                travel =
+                    rabbitPixelsPerMillisecond * milliseconds
+            in
+            if distance <= travel then
+                { rabbit | x = rabbit.x + dx, y = rabbit.y + dy, route = rest }
+
+            else
+                { rabbit | x = rabbit.x + dx / distance * travel, y = rabbit.y + dy / distance * travel }
+
+        _ ->
+            rabbit
+
+
+rabbitIsGone : Rabbit -> Bool
+rabbitIsGone rabbit =
+    rabbit.running && List.isEmpty rabbit.route
+
+
+score : Model -> Contract.Score
+score model =
+    let
+        bonus condition =
+            if condition then
+                1
+
+            else
+                0
+    in
+    { tarts = 1 + bonus model.usedCount + bonus (model.keystrokes <= keystrokesForThirdTart)
+    , stats =
+        [ { label = .results >> .keystrokes, value = \_ -> String.fromInt model.keystrokes }
+        , { label = .results >> .fewestPossible, value = \_ -> String.fromInt fewestKeystrokes }
+        , { label = .results >> .usedCount
+          , value =
+                \texts ->
+                    if model.usedCount then
+                        texts.results.yes
+
+                    else
+                        texts.results.notYet
+          }
+        ]
+    }
+
+
+
+-- VIEW
+
+
+view : Context -> Model -> Contract.View msg
+view context model =
+    { stage =
+        Html.div [ HA.class "stage-scene" ]
+            [ Svg.svg [ SA.viewBox "0 0 320 192", SA.class "pixel-scene" ]
+                [ Svg.Lazy.lazy viewMap model.map
+                , viewKeySparkle model
+                , viewRabbit model.rabbit
+                , viewAlice model
+                , viewKeyHints model
+                , viewPendingCount model
+                ]
+            , case model.dialog of
+                Just dialog ->
+                    Dialog.view context.texts dialog
+
+                Nothing ->
+                    Html.text ""
+            ]
+    , panel = viewPanel context model
+    , status =
+        { mode = "NOR"
+        , file = file
+        , pendingKeys = model.pendingCount
+        , position = String.fromInt (model.alice.y + 1) ++ ":" ++ String.fromInt (model.alice.x + 1)
+        }
+    , keyboard = { target = Nothing, helpers = [ "h", "j", "k", "l" ] }
+    }
+
+
+{-| The empty hall, drawn behind the title and results cards.
+-}
+backdrop : Svg msg
+backdrop =
+    Svg.svg [ SA.viewBox "0 0 320 192", SA.class "pixel-scene" ]
+        [ Svg.Lazy.lazy viewMap (parseMap plan) ]
+
+
+viewMap : Map -> Svg msg
+viewMap map =
+    map
+        |> Array.toIndexedList
+        |> List.concatMap
+            (\( y, row ) ->
+                row
+                    |> Array.toIndexedList
+                    |> List.map (\( x, tile ) -> viewTile { x = x, y = y } tile)
+            )
+        |> Svg.g []
+
+
+viewTile : Point -> Tile -> Svg msg
+viewTile position tile =
+    if tile == GoldenKey then
+        Svg.g []
+            [ Tiles.view position tile
+            , Sprite.viewAt { x = toFloat (position.x * 16 + 3), y = toFloat (position.y * 16 + 7), pixelSize = 1 } Sprites.goldenKey
+            ]
+
+    else
+        Tiles.view position tile
+
+
+viewKeySparkle : Model -> Svg msg
+viewKeySparkle model =
+    case ( model.hasKey, findTile GoldenKey model.map ) of
+        ( False, Just { x, y } ) ->
+            if modBy 2 (floor (model.clock / 330)) == 0 then
+                pixelRect (x * 16 + 12) (y * 16 + 4) 1 1 "#ffffff"
+
+            else
+                Svg.g [] []
+
+        _ ->
+            Svg.g [] []
+
+
+viewRabbit : Rabbit -> Svg msg
+viewRabbit rabbit =
+    if rabbitIsGone rabbit then
+        Svg.g [] []
+
+    else
+        Sprite.viewAt { x = rabbit.x + 2, y = rabbit.y, pixelSize = 1 } Sprites.whiteRabbit
+
+
+viewAlice : Model -> Svg msg
+viewAlice model =
+    let
+        ( x, y ) =
+            aliceOnScreen model
+
+        shake =
+            if model.bumpRemaining > 0 then
+                sin (model.clock * 0.09)
+
+            else
+                0
+
+        sprite =
+            if modBy 2 model.stepsTaken == 1 then
+                Sprites.aliceStepping
+
+            else
+                Sprites.alice
+    in
+    Sprite.viewAt { x = x + 2 + shake, y = y, pixelSize = 1 } sprite
+
+
+{-| Alice's pixel position, sliding between tiles while a step is animating.
+-}
+aliceOnScreen : Model -> ( Float, Float )
+aliceOnScreen model =
+    let
+        toPixels point =
+            ( toFloat (point.x * Tiles.size), toFloat (point.y * Tiles.size) )
+
+        ( toX, toY ) =
+            toPixels model.alice
+    in
+    case model.step of
+        Just step ->
+            let
+                ( fromX, fromY ) =
+                    toPixels step.from
+            in
+            ( fromX + (toX - fromX) * step.progress, fromY + (toY - fromY) * step.progress )
+
+        Nothing ->
+            ( toX, toY )
+
+
+{-| Little keycaps next to Alice, showing which key walks where.
+-}
+viewKeyHints : Model -> Svg msg
+viewKeyHints model =
+    let
+        showHints =
+            model.phase == Exploring && model.stepsTaken < stepsWithHints && model.step == Nothing && not (isTalking model)
+
+        keycap ( key, direction ) =
+            let
+                spot =
+                    neighbour direction model.alice
+            in
+            if Tiles.isWalkable (tileAt spot model.map) then
+                [ pixelRect (spot.x * 16 + 3) (spot.y * 16 + 4) 10 10 "#120a18"
+                , pixelRect (spot.x * 16 + 3) (spot.y * 16 + 3) 10 9 "#dbbfef"
+                , label (spot.x * 16 + 8) (spot.y * 16 + 11) key
+                ]
+
+            else
+                []
+    in
+    if showHints then
+        Svg.g [] (List.concatMap keycap [ ( "h", Left ), ( "j", Down ), ( "k", Up ), ( "l", Right ) ])
+
+    else
+        Svg.g [] []
+
+
+viewPendingCount : Model -> Svg msg
+viewPendingCount model =
+    if model.pendingCount == "" then
+        Svg.g [] []
+
+    else
+        let
+            ( x, y ) =
+                aliceOnScreen model
+        in
+        Svg.g []
+            [ pixelRect (round x) (round y - 12) 16 10 "#efba5d"
+            , label (round x + 8) (round y - 4) model.pendingCount
+            ]
+
+
+viewPanel : Context -> Model -> Html msg
+viewPanel context model =
+    let
+        texts =
+            context.texts
+
+        paragraph class text =
+            Html.p [ HA.class class ] [ Html.text text ]
+
+        stat name value =
+            Html.span [] [ Html.text name, Html.b [] [ Html.text value ] ]
+    in
+    Html.div [ HA.class "panel-content" ]
+        (List.concat
+            [ [ Html.div [ HA.class "legend" ]
+                    (List.map
+                        (\( key, arrow ) -> Html.span [] [ Html.b [] [ Html.text key ], Html.text (" " ++ arrow) ])
+                        [ ( "h", "←" ), ( "j", "↓" ), ( "k", "↑" ), ( "l", "→" ) ]
+                    )
+              ]
+            , if model.hasKey then
+                [ paragraph "big" texts.hall.goToCurtain, paragraph "" texts.hall.countTip ]
+
+              else
+                [ paragraph "big" texts.hall.findKey ]
+            , if model.hasKey && Layout.needsShiftForDigits context.layout then
+                [ paragraph "tip" texts.hall.azertyTip ]
+
+              else
+                []
+            , [ Html.div [ HA.class "stats" ]
+                    [ stat texts.results.keystrokes (String.fromInt model.keystrokes)
+                    , stat texts.results.usedCount
+                        (if model.usedCount then
+                            texts.results.yes
+
+                         else
+                            texts.results.notYet
+                        )
+                    ]
+              ]
+            ]
+        )
+
+
+
+-- SVG HELPERS
+
+
+pixelRect : Int -> Int -> Int -> Int -> String -> Svg msg
+pixelRect x y w h color =
+    Svg.rect
+        [ SA.x (String.fromInt x)
+        , SA.y (String.fromInt y)
+        , SA.width (String.fromInt w)
+        , SA.height (String.fromInt h)
+        , SA.fill color
+        ]
+        []
+
+
+label : Int -> Int -> String -> Svg msg
+label x y text =
+    Svg.text_
+        [ SA.x (String.fromInt x)
+        , SA.y (String.fromInt y)
+        , SA.class "pixel-label"
+        , SA.textAnchor "middle"
+        ]
+        [ Svg.text text ]
