@@ -29,7 +29,14 @@ npm run format   # elm-format everything
 npm run check    # all of the above except build; run before every commit
 ```
 
-Open `dist/helix-wonderland.html` in a browser. There is no server.
+`npm run build` writes two outputs: `dist/site/` is a complete static website
+(open `dist/site/index.html` in a browser, or host it anywhere), and
+`dist/helix-wonderland.html` is the same game as a page fragment for
+claude.ai artifacts.
+
+Pushing to `main` on GitHub runs the tests and publishes `dist/site` to
+GitHub Pages (`.github/workflows/pages.yml`). `netlify.toml` does the same
+for Netlify if the repo is connected there.
 
 ## How the code is organised
 
