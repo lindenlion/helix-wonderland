@@ -1,0 +1,8 @@
+# For deploying from a Git repository: Netlify runs the build and serves dist/site.
+# (A drag-and-drop deploy of dist/site needs none of this.)
+[build]
+  command = "npm run build"
+  publish = "dist/site"
+
+[build.environment]
+  NODE_VERSION = "22"
