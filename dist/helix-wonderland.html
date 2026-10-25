@@ -68,9 +68,9 @@ p{margin:0}
 .hint,.eyebrow{font-family:var(--display);font-size:11px;color:var(--lavender);letter-spacing:.04em}
 h2{margin:0;font-family:var(--display);font-weight:400;font-size:22px}
 .tarts{display:inline-flex;gap:4px;align-items:center}
-.tart{display:block;width:20px;height:12px}
+.tart{display:block;width:28px;height:16px}
 .tarts.large{gap:10px}
-.tarts.large .tart{width:56px;height:34px}
+.tarts.large .tart{width:56px;height:32px}
 .tart.dim{opacity:.2;filter:grayscale(1)}
 .lesson{font-family:var(--mono);font-size:22px;color:var(--honey)}
 .stats{display:flex;flex-wrap:wrap;gap:8px 20px;font-family:var(--display);font-size:10px;letter-spacing:.05em;color:var(--muted);text-transform:uppercase}
@@ -12272,13 +12272,15 @@ var $author$project$Pixel$Sprites$tart = A2(
 	$author$project$Pixel$Sprite$fromRows,
 	_List_fromArray(
 		[
-			_Utils_Tuple2('c', '#d9a05b'),
-			_Utils_Tuple2('j', '#c8344e'),
-			_Utils_Tuple2('w', '#ffb3c1'),
-			_Utils_Tuple2('C', '#9c6a32')
+			_Utils_Tuple2('c', '#f4c15d'),
+			_Utils_Tuple2('C', '#d9952f'),
+			_Utils_Tuple2('B', '#b9772a'),
+			_Utils_Tuple2('j', '#e8203f'),
+			_Utils_Tuple2('w', '#ffe0e6'),
+			_Utils_Tuple2('p', '#ff9fc2')
 		]),
 	_List_fromArray(
-		['..cccccc..', '.cjjjjjjc.', 'cjjwjjjjjc', 'cjjjjjjjjc', 'cccccccccc', '.CCCCCCCC.']));
+		['...cCcCcCcC...', '..cjjjjjjjjc..', '.cjwjppjppjjc.', 'cjjjjpppppjjjc', 'cjjjjjpppjjjjc', '.cjjjjjpjjjjc.', '..cjjjjjjjjc..', '...BBBBBBBB...']));
 var $author$project$Ui$Tarts$view = F2(
 	function (sizeClass, earned) {
 		return A2(
@@ -12295,7 +12297,7 @@ var $author$project$Ui$Tarts$view = F2(
 						$elm$svg$Svg$svg,
 						_List_fromArray(
 							[
-								$elm$svg$Svg$Attributes$viewBox('0 0 10 6'),
+								$elm$svg$Svg$Attributes$viewBox('0 0 14 8'),
 								$elm$svg$Svg$Attributes$class(
 								(_Utils_cmp(index, earned) < 0) ? 'tart' : 'tart dim')
 							]),
