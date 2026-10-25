@@ -1,4 +1,4 @@
-<title>Helix in Wonderland (Elm)</title>
+<title>Helix in Wonderland</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&family=VT323&display=swap">
@@ -37,22 +37,34 @@ p{margin:0}
 .stage-scene{position:relative}
 .pixel-scene{display:block;width:100%;height:auto;aspect-ratio:5/3;max-width:100%;shape-rendering:crispEdges}
 .pixel-label{font-family:var(--mono);font-size:12px;fill:var(--ink)}
+.jar-letter{font-family:var(--mono);font-size:14px;fill:var(--ink)}
+.bottle-label{font-family:var(--display);font-size:8px;fill:var(--ink)}
+.banner{display:block;width:100%;height:auto;aspect-ratio:320/56;max-width:100%;shape-rendering:crispEdges}
+
+/* The Helix editor in chapters 4 and 5 */
+.editor{font-family:var(--mono);font-size:clamp(19px,2.5vw,26px);line-height:1.3;padding-block:12px;background:var(--revolver);min-height:300px;overflow-x:auto}
+.editor-line{display:flex;white-space:pre;min-width:max-content;padding-right:16px}
+.editor-gutter{width:4ch;flex:none;text-align:right;padding-right:1.2ch;color:var(--plum)}
+.editor-line.current .editor-gutter{color:var(--lilac)}
+.editor-code .selected{background:#540099}
+.editor-code .cursor{background:var(--lilac);color:var(--revolver)}
+.editor-code .insertion-point{box-shadow:inset 3px 0 0 var(--honey)}
 .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(18,10,24,.66);overflow:auto;padding:16px}
 .card{background:var(--revolver);border:3px solid var(--plum);box-shadow:6px 6px 0 var(--ink);padding:20px 22px;max-width:580px;width:100%;display:flex;flex-direction:column;gap:12px}
 .logo{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(22px,4.4vw,40px);line-height:1.1;text-shadow:3px 3px 0 #540099;text-wrap:balance}
 .logo-accent{color:var(--honey)}
 .logo small{font-size:.55em;color:var(--lavender)}
 .tagline{color:var(--muted);max-width:60ch}
-.notice{font-size:14px;color:var(--honey);border-left:3px solid var(--honey);padding-left:8px}
 .chapters{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .chapters li{display:grid;grid-template-columns:2.2em 1fr auto;gap:10px;align-items:center;padding:7px 10px;border:2px solid transparent;cursor:pointer}
 .chapters li.selected{border-color:var(--honey);background:var(--midnight)}
-.chapters li.unavailable{opacity:.5}
+.chapters li.locked{opacity:.45;cursor:not-allowed}
 .chapter-number{font-family:var(--display);color:var(--honey);font-size:18px}
 .chapter-text{min-width:0}
 .chapter-name{font-weight:600;display:block}
 .chapter-skill{font-size:14px;color:var(--muted);display:block}
 .chapter-status{font-family:var(--display);font-size:9px;color:var(--muted);text-align:right;max-width:9em}
+.chapter-status.start{color:var(--honey)}
 .hint,.eyebrow{font-family:var(--display);font-size:11px;color:var(--lavender);letter-spacing:.04em}
 h2{margin:0;font-family:var(--display);font-weight:400;font-size:22px}
 .tarts{display:inline-flex;gap:4px;align-items:center}
@@ -66,6 +78,7 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:22px}
 .actions{display:flex;flex-wrap:wrap;gap:8px}
 .actions button{background:var(--midnight);border:2px solid var(--plum);padding:8px 12px;font-family:var(--display);font-size:11px}
 .actions button.primary{background:var(--honey);color:var(--ink);border-color:var(--honey)}
+.actions button.quiet{background:transparent;color:var(--muted);font-size:10px}
 
 .dialog{position:absolute;left:12px;right:12px;bottom:12px;background:var(--revolver);border:3px solid var(--lilac);box-shadow:4px 4px 0 var(--ink);display:flex;gap:12px;padding:10px 12px;align-items:flex-start}
 .dialog-portrait{width:48px;height:48px;flex:none;background:var(--midnight);shape-rendering:crispEdges}
@@ -82,6 +95,25 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:22px}
 .legend b{color:var(--honey);font-weight:400}
 .big{font-size:18px}
 .tip{color:var(--honey)}
+.idea{font-family:var(--display);font-size:11px;color:var(--honey);letter-spacing:.04em}
+.columns{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.column,.goal{display:flex;flex-direction:column;gap:6px;min-width:0}
+@media (max-width:640px){.columns{grid-template-columns:1fr}}
+.checklist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.checklist li{padding-left:2.4em;position:relative}
+.checklist li::before{content:"[ ]";position:absolute;left:0;font-family:var(--mono);font-size:20px;line-height:1.1;color:var(--muted)}
+.checklist li.done{color:var(--muted)}
+.checklist li.done::before{content:"[x]";color:var(--mint)}
+.checklist li.now{font-weight:600}
+.goal-text{margin:0;font-family:var(--mono);font-size:17px;line-height:1.2;color:var(--lavender);background:var(--midnight);padding:8px 10px;overflow-x:auto;white-space:pre}
+.meter{height:8px;background:var(--midnight)}
+.meter i{display:block;height:100%;background:var(--mint);transition:width .2s}
+.words{font-family:var(--mono);font-size:clamp(26px,4vw,40px);display:flex;flex-wrap:wrap;gap:.2em .6em;line-height:1.1}
+.word.done{color:var(--plum)}
+.word.next{color:var(--muted)}
+.word.now .typed{color:var(--mint)}
+.word.now .current{border-bottom:3px solid var(--honey)}
+.word.now .wrong{color:var(--apricot);border-color:var(--apricot)}
 
 .status-line{display:flex;flex-wrap:wrap;background:var(--midnight);font-family:var(--mono);font-size:20px;line-height:1.35}
 .status-line>span{padding:0 10px;white-space:nowrap}
@@ -122,10 +154,30 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:22px}
   const load = (key) => { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } };
   const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} };
 
+  // The first, single-file version of the game saved under other names.
+  // Carry its progress and settings over once, so nobody starts from zero.
+  function carryOverFromPrototype() {
+    if (load('helix-wonderland.progress') !== null) return;
+    const old = load('hiw.prog');
+    if (!old) return;
+    const chapters = ['rabbit-hole', 'hall-of-doors', 'drink-me', 'pool-of-tears', 'caterpillar'];
+    const progress = {};
+    Object.entries(old).forEach(([index, tarts]) => { if (chapters[index]) progress[chapters[index]] = tarts; });
+    save('helix-wonderland.progress', progress);
+    save('helix-wonderland.settings', {
+      language: { en: 'EN', de: 'DE' }[load('hiw.lang')],
+      layout: { qwertz: 'de', qwertzch: 'ch', qwerty: 'us', azerty: 'fr' }[load('hiw.layout')],
+      soundOn: load('hiw.sound') !== false,
+      unlockAll: load('hiw.all') === true
+    });
+  }
+  carryOverFromPrototype();
+
   const app = Elm.Main.init({
     node: document.getElementById('app'),
     flags: {
       browserLanguage: navigator.language || 'en',
+      seed: Math.floor(Math.random() * 2147483647),
       settings: load('helix-wonderland.settings'),
       progress: load('helix-wonderland.progress')
     }
@@ -149,6 +201,7 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:22px}
   const sounds = {
     step:   () => beep(330, 0.03, 'triangle', 0.03),
     tick:   () => beep(520, 0.02, 'triangle', 0.02),
+    correct:() => beep(880, 0.06),
     bump:   () => beep(100, 0.09, 'square', 0.035),
     error:  () => beep(140, 0.13, 'sawtooth', 0.035),
     pickup: () => { beep(988, 0.08); setTimeout(() => beep(1318, 0.12), 80); },

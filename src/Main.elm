@@ -5,16 +5,20 @@ module Main exposing (main)
 This is the one place where chapters meet the outside world. A chapter asks
 for things through `Chapter.Contract.Effect`; `applyEffect` below carries
 them out (sound, toasts, saving progress). Adding a chapter means adding a
-case to `Chapter` and to the three functions under CHAPTERS; the compiler
+case to `Chapter` and to the four functions under CHAPTERS; the compiler
 points at each one.
 
 -}
 
 import Browser
 import Browser.Events
+import Chapter.Caterpillar as Caterpillar
 import Chapter.Contract as Contract exposing (Context, Effect(..), Score)
+import Chapter.DrinkMe as DrinkMe
 import Chapter.Hall as Hall
 import Chapter.Id as ChapterId exposing (ChapterId(..))
+import Chapter.Pool as Pool
+import Chapter.RabbitHole as RabbitHole
 import Html exposing (Html)
 import Html.Attributes as A
 import Json.Decode as Decode exposing (Decoder)
@@ -23,10 +27,12 @@ import Keyboard.View
 import Language exposing (Language)
 import Ports
 import Progress exposing (Progress)
+import Random
 import Settings exposing (Settings)
 import Texts exposing (Texts)
 import Ui.Chrome as Chrome
 import Ui.Results
+import Ui.TheEnd
 import Ui.Title
 
 
@@ -49,6 +55,7 @@ type alias Model =
     , progress : Progress
     , screen : Screen
     , selectedChapter : ChapterId
+    , seed : Random.Seed
     , toast : Maybe Toast
     , flash : Maybe Flash
     }
@@ -58,12 +65,17 @@ type Screen
     = Title
     | Playing Chapter
     | Results ChapterId Score
+    | TheEnd
 
 
-{-| One case per chapter that has been rebuilt in Elm.
+{-| One case per chapter.
 -}
 type Chapter
-    = HallChapter Hall.Model
+    = RabbitHoleChapter RabbitHole.Model
+    | HallChapter Hall.Model
+    | DrinkMeChapter DrinkMe.Model
+    | PoolChapter Pool.Model
+    | CaterpillarChapter Caterpillar.Model
 
 
 type alias Toast =
@@ -84,8 +96,9 @@ flashMilliseconds =
     170
 
 
-{-| Flags from JavaScript: the browser language and anything saved earlier.
-Bad or missing data never stops the game; it falls back to defaults.
+{-| Flags from JavaScript: the browser language, a random seed, and anything
+saved earlier. Bad or missing data never stops the game; it falls back to
+defaults.
 -}
 init : Decode.Value -> ( Model, Cmd Msg )
 init flags =
@@ -96,16 +109,30 @@ init flags =
 
         defaults =
             Settings.guess (decodeFlag "browserLanguage" Decode.string "en")
+
+        progress =
+            decodeFlag "progress" Progress.decoder Progress.empty
     in
     ( { settings = decodeFlag "settings" (Settings.decoder defaults) defaults
-      , progress = decodeFlag "progress" Progress.decoder Progress.empty
+      , progress = progress
       , screen = Title
-      , selectedChapter = HallOfDoors
+      , selectedChapter = firstUnfinished progress
+      , seed = Random.initialSeed (decodeFlag "seed" Decode.int 1865)
       , toast = Nothing
       , flash = Nothing
       }
     , Cmd.none
     )
+
+
+{-| Where a returning player probably wants to continue.
+-}
+firstUnfinished : Progress -> ChapterId
+firstUnfinished progress =
+    ChapterId.all
+        |> List.filter (\id -> Progress.tartsFor id progress == 0)
+        |> List.head
+        |> Maybe.withDefault RabbitHole
 
 
 
@@ -118,8 +145,11 @@ type Msg
     | ChoseLanguage Language
     | ChoseLayout Layout
     | ToggledSound
+    | ToggledUnlockAll
     | OpenedMenu
+    | ChoseChapter ChapterId
     | StartedChapter ChapterId
+    | FinishedGame
 
 
 type alias KeyPress =
@@ -149,11 +179,20 @@ update msg model =
         ToggledSound ->
             saveSettings (\s -> { s | soundOn = not s.soundOn }) model
 
+        ToggledUnlockAll ->
+            saveSettings (\s -> { s | unlockAll = not s.unlockAll }) model
+
         OpenedMenu ->
             ( { model | screen = Title }, Cmd.none )
 
+        ChoseChapter id ->
+            chooseChapter id model
+
         StartedChapter id ->
             startChapter id model
+
+        FinishedGame ->
+            ( { model | screen = TheEnd }, Cmd.none )
 
 
 handleKey : String -> Model -> ( Model, Cmd Msg )
@@ -174,7 +213,7 @@ handleKey key model =
                     ( { model | selectedChapter = shiftChapter -1 model.selectedChapter }, Cmd.none )
 
                 "Enter" ->
-                    startChapter model.selectedChapter model
+                    chooseChapter model.selectedChapter model
 
                 _ ->
                     ( model, Cmd.none )
@@ -185,12 +224,7 @@ handleKey key model =
         Results id _ ->
             case key of
                 "Enter" ->
-                    case nextPlayable id of
-                        Just next ->
-                            startChapter next model
-
-                        Nothing ->
-                            ( { model | screen = Title }, Cmd.none )
+                    afterResults id model
 
                 "r" ->
                     startChapter id model
@@ -201,15 +235,52 @@ handleKey key model =
                 _ ->
                     ( model, Cmd.none )
 
+        TheEnd ->
+            if key == "Enter" || key == "m" then
+                ( { model | screen = Title }, Cmd.none )
+
+            else
+                ( model, Cmd.none )
+
+
+{-| From the title screen: start the chapter if it is open, otherwise say
+why not.
+-}
+chooseChapter : ChapterId -> Model -> ( Model, Cmd Msg )
+chooseChapter id model =
+    if Progress.isOpen { unlockAll = model.settings.unlockAll } id model.progress then
+        startChapter id model
+
+    else
+        ( { model | selectedChapter = id, toast = Just { text = .finishEarlierChapter, remaining = toastMilliseconds } }
+        , playSound model "error"
+        )
+
 
 startChapter : ChapterId -> Model -> ( Model, Cmd Msg )
 startChapter id model =
-    case newChapter id of
-        Just chapter ->
-            ( { model | screen = Playing chapter, selectedChapter = id }, Cmd.none )
+    let
+        ( chapterSeed, nextSeed ) =
+            Random.step Random.independentSeed model.seed
+    in
+    ( { model
+        | screen = Playing (newChapter chapterSeed id)
+        , selectedChapter = id
+        , seed = nextSeed
+        , toast = Nothing
+      }
+    , Cmd.none
+    )
+
+
+afterResults : ChapterId -> Model -> ( Model, Cmd Msg )
+afterResults id model =
+    case ChapterId.next id of
+        Just next ->
+            startChapter next model
 
         Nothing ->
-            ( { model | selectedChapter = id, toast = Just { text = .notPortedYet, remaining = toastMilliseconds } }, Cmd.none )
+            ( { model | screen = TheEnd }, Cmd.none )
 
 
 stepCurrentChapter : ChapterInput -> Model -> ( Model, Cmd Msg )
@@ -250,7 +321,7 @@ applyEffect id effect model =
                 progress =
                     Progress.record id score.tarts model.progress
             in
-            ( { model | screen = Results id score, progress = progress }
+            ( { model | screen = Results id score, progress = progress, toast = Nothing }
             , Cmd.batch [ Ports.saveProgress (Progress.encode progress), playSound model "fanfare" ]
             )
 
@@ -309,19 +380,6 @@ shiftChapter delta id =
         |> Maybe.withDefault id
 
 
-nextPlayable : ChapterId -> Maybe ChapterId
-nextPlayable id =
-    ChapterId.next id
-        |> Maybe.andThen
-            (\next ->
-                if ChapterId.isPorted next then
-                    Just next
-
-                else
-                    nextPlayable next
-            )
-
-
 countDown : Float -> Maybe { a | remaining : Float } -> Maybe { a | remaining : Float }
 countDown milliseconds timer =
     timer
@@ -354,44 +412,96 @@ type ChapterInput
     | Tick Float
 
 
-newChapter : ChapterId -> Maybe Chapter
-newChapter id =
+newChapter : Random.Seed -> ChapterId -> Chapter
+newChapter seed id =
     case id of
-        HallOfDoors ->
-            Just (HallChapter Hall.init)
+        RabbitHole ->
+            RabbitHoleChapter (RabbitHole.init seed)
 
-        _ ->
-            Nothing
+        HallOfDoors ->
+            HallChapter Hall.init
+
+        DrinkMe ->
+            DrinkMeChapter DrinkMe.init
+
+        PoolOfTears ->
+            PoolChapter Pool.init
+
+        CaterpillarsAdvice ->
+            CaterpillarChapter Caterpillar.init
 
 
 chapterId : Chapter -> ChapterId
 chapterId chapter =
     case chapter of
+        RabbitHoleChapter _ ->
+            RabbitHole
+
         HallChapter _ ->
             HallOfDoors
 
+        DrinkMeChapter _ ->
+            DrinkMe
 
+        PoolChapter _ ->
+            PoolOfTears
+
+        CaterpillarChapter _ ->
+            CaterpillarsAdvice
+
+
+{-| Every chapter has the same two messages, a key and a frame; this turns
+the shell's input into the chapter's own `Msg`.
+-}
 stepChapter : Context -> ChapterInput -> Chapter -> ( Chapter, List Effect )
 stepChapter ctx input chapter =
-    case chapter of
-        HallChapter hall ->
+    let
+        run chapterUpdate keyMsg frameMsg wrap model =
             let
                 msg =
                     case input of
                         Key key ->
-                            Hall.KeyPressed key
+                            keyMsg key
 
                         Tick milliseconds ->
-                            Hall.Frame milliseconds
+                            frameMsg milliseconds
             in
-            Hall.update ctx msg hall |> Tuple.mapFirst HallChapter
+            chapterUpdate ctx msg model |> Tuple.mapFirst wrap
+    in
+    case chapter of
+        RabbitHoleChapter model ->
+            run RabbitHole.update RabbitHole.KeyPressed RabbitHole.Frame RabbitHoleChapter model
+
+        HallChapter model ->
+            run Hall.update Hall.KeyPressed Hall.Frame HallChapter model
+
+        DrinkMeChapter model ->
+            run DrinkMe.update DrinkMe.KeyPressed DrinkMe.Frame DrinkMeChapter model
+
+        PoolChapter model ->
+            run Pool.update Pool.KeyPressed Pool.Frame PoolChapter model
+
+        CaterpillarChapter model ->
+            run Caterpillar.update Caterpillar.KeyPressed Caterpillar.Frame CaterpillarChapter model
 
 
 viewChapter : Context -> Chapter -> Contract.View Msg
 viewChapter ctx chapter =
     case chapter of
-        HallChapter hall ->
-            Hall.view ctx hall
+        RabbitHoleChapter model ->
+            RabbitHole.view ctx model
+
+        HallChapter model ->
+            Hall.view ctx model
+
+        DrinkMeChapter model ->
+            DrinkMe.view ctx model
+
+        PoolChapter model ->
+            Pool.view ctx model
+
+        CaterpillarChapter model ->
+            Caterpillar.view ctx model
 
 
 
@@ -449,28 +559,44 @@ view model =
                     viewChapter ctx chapter
 
                 Title ->
-                    { stage = overlay Hall.backdrop (Ui.Title.view { texts = texts, progress = model.progress, selected = model.selectedChapter, onStart = StartedChapter })
-                    , panel = Html.p [ A.class "big" ] [ Html.text texts.tagline ]
-                    , status = idleStatus
-                    , keyboard = { target = Nothing, helpers = [ "j", "k" ] }
-                    }
+                    cardScreen
+                        (Ui.Title.view
+                            { texts = texts
+                            , progress = model.progress
+                            , selected = model.selectedChapter
+                            , unlockAll = model.settings.unlockAll
+                            , onStart = ChoseChapter
+                            , onToggleUnlock = ToggledUnlockAll
+                            }
+                        )
+                        (Html.p [ A.class "big" ] [ Html.text texts.tagline ])
+                        [ "j", "k" ]
 
                 Results id score ->
-                    { stage =
-                        overlay Hall.backdrop
-                            (Ui.Results.view
-                                { texts = texts
-                                , chapter = id
-                                , score = score
-                                , onNext = Maybe.map StartedChapter (nextPlayable id)
-                                , onReplay = StartedChapter id
-                                , onMenu = OpenedMenu
-                                }
-                            )
-                    , panel = Html.p [ A.class "lesson" ] [ Html.text (texts.chapter id).lesson ]
-                    , status = idleStatus
-                    , keyboard = { target = Nothing, helpers = [] }
-                    }
+                    cardScreen
+                        (Ui.Results.view
+                            { texts = texts
+                            , chapter = id
+                            , score = score
+                            , onNext =
+                                case ChapterId.next id of
+                                    Just next ->
+                                        StartedChapter next
+
+                                    Nothing ->
+                                        FinishedGame
+                            , onReplay = StartedChapter id
+                            , onMenu = OpenedMenu
+                            }
+                        )
+                        (Html.p [ A.class "lesson" ] [ Html.text (texts.chapter id).lesson ])
+                        []
+
+                TheEnd ->
+                    cardScreen
+                        (Ui.TheEnd.view { texts = texts, totalTarts = Progress.total model.progress, onMenu = OpenedMenu })
+                        (Html.p [ A.class "big" ] [ Html.text texts.theEnd.teaser ])
+                        []
     in
     Html.div [ A.class "app" ]
         [ Chrome.header
@@ -502,14 +628,16 @@ view model =
         ]
 
 
-overlay : Html Msg -> Html Msg -> Html Msg
-overlay background card =
-    Html.div [ A.class "stage-scene" ]
-        [ background
-        , Html.div [ A.class "overlay" ] [ card ]
-        ]
-
-
-idleStatus : Contract.Status
-idleStatus =
-    { mode = "NOR", file = "wonderland.txt", pendingKeys = "", position = "1:1" }
+{-| Title, results and the end: a card over the empty hall.
+-}
+cardScreen : Html Msg -> Html Msg -> List String -> Contract.View Msg
+cardScreen card panel helpers =
+    { stage =
+        Html.div [ A.class "stage-scene" ]
+            [ Hall.backdrop
+            , Html.div [ A.class "overlay" ] [ card ]
+            ]
+    , panel = panel
+    , status = { mode = "NOR", file = "wonderland.txt", pendingKeys = "", position = "1:1" }
+    , keyboard = { target = Nothing, helpers = helpers }
+    }

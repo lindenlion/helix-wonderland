@@ -9,3 +9,5 @@ type Speaker
     = Narrator
     | Alice
     | WhiteRabbit
+    | Caterpillar
+    | Mouse

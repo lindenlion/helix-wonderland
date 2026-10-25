@@ -1,4 +1,4 @@
-module Progress exposing (Progress, decoder, empty, encode, record, tartsFor)
+module Progress exposing (Progress, decoder, empty, encode, isOpen, record, tartsFor, total)
 
 {-| Tarts earned per chapter. Only the best result for a chapter is kept.
 -}
@@ -21,6 +21,24 @@ empty =
 tartsFor : ChapterId -> Progress -> Int
 tartsFor id (Progress best) =
     Dict.get (ChapterId.toKey id) best |> Maybe.withDefault 0
+
+
+{-| A chapter opens once the chapter before it has earned at least one tart.
+The first chapter is always open, and grown-ups can open everything.
+-}
+isOpen : { unlockAll : Bool } -> ChapterId -> Progress -> Bool
+isOpen { unlockAll } id progress =
+    case ChapterId.previous id of
+        Just earlier ->
+            unlockAll || tartsFor earlier progress > 0
+
+        Nothing ->
+            True
+
+
+total : Progress -> Int
+total (Progress best) =
+    List.sum (Dict.values best)
 
 
 record : ChapterId -> Int -> Progress -> Progress

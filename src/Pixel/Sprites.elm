@@ -1,4 +1,4 @@
-module Pixel.Sprites exposing (alice, aliceStepping, goldenKey, tart, whiteRabbit)
+module Pixel.Sprites exposing (alice, aliceFalling, aliceStepping, aliceSwimming, caterpillar, goldenKey, mouse, tart, whiteRabbit)
 
 {-| The game's characters and props. Original pixel art, in the spirit of the
 1865 book rather than any film.
@@ -61,6 +61,36 @@ aliceStepping =
         )
 
 
+{-| Arms up, dress puffed out, falling down the rabbit hole.
+-}
+aliceFalling : Sprite
+aliceFalling =
+    Sprite.fromRows alicePalette
+        [ "s...kkkk...s"
+        , "s..yyyyyy..s"
+        , "syyyyyyyyyys"
+        , ".yssssssssy."
+        , "..ysksskys.."
+        , "..yssssssy.."
+        , "..yYsppsYy.."
+        , "...bbwwbb..."
+        , "..bbbwwbbb.."
+        , ".bbbwwwwbbb."
+        , "bbbbwwwwbbbb"
+        , "BBBBBBBBBBBB"
+        , "...s....s..."
+        , "..s......s.."
+        , ".k........k."
+        ]
+
+
+{-| Just the head and shoulders, for swimming in the pool of tears.
+-}
+aliceSwimming : Sprite
+aliceSwimming =
+    Sprite.fromRows alicePalette (List.take 8 aliceUpperBody)
+
+
 whiteRabbit : Sprite
 whiteRabbit =
     Sprite.fromRows
@@ -86,6 +116,52 @@ whiteRabbit =
         , "...ww..ww..."
         , "...ww..ww..."
         , "..www..www.."
+        ]
+
+
+{-| The large blue Caterpillar on its mushroom, arms folded.
+-}
+caterpillar : Sprite
+caterpillar =
+    Sprite.fromRows
+        [ ( 'c', "#5fb3e6" ) -- body
+        , ( 'C', "#3d86b8" ) -- folded arms
+        , ( 'k', "#120a18" ) -- eye
+        , ( 'r', "#c8344e" ) -- mushroom cap
+        , ( 'w', "#f4f0ff" ) -- spots
+        , ( 't', "#efe2c8" ) -- stem
+        ]
+        [ "................"
+        , ".....cc........."
+        , "....cccc........"
+        , "....ckcc........"
+        , ".....ccc........"
+        , "....cCcc........"
+        , "...cCcc........."
+        , "..rrrrrrrrrrrr.."
+        , ".rrwwrrrrrrwwrr."
+        , "rrrrrrrwwrrrrrrr"
+        , "rrwwrrrrrrrrwwrr"
+        , ".rrrrrrrrrrrrrr."
+        , "......tttt......"
+        , "......tttt......"
+        , "......tttt......"
+        , ".....tttttt....."
+        ]
+
+
+{-| The Mouse, swimming in the pool of tears.
+-}
+mouse : Sprite
+mouse =
+    Sprite.fromRows
+        [ ( 'g', "#9a86b0" ), ( 'k', "#120a18" ), ( 'p', "#e88aa8" ) ]
+        [ "..g........"
+        , ".ggg......."
+        , "gkgggggg..."
+        , "ggggggggg.."
+        , ".gggggggggp"
+        , "..g..g...pp"
         ]
 
 

@@ -5,11 +5,12 @@ for Alice to walk. No browser involved, just messages in, model and effects
 out.
 -}
 
-import Chapter.Contract exposing (Context, Effect(..))
+import Chapter.Contract exposing (Context)
 import Chapter.Hall as Hall
 import Expect
 import Keyboard.Layout exposing (Layout(..))
 import Language exposing (Language(..))
+import Playthrough exposing (Run)
 import Test exposing (Test, describe, test)
 import Texts
 
@@ -19,76 +20,33 @@ context =
     { texts = Texts.forLanguage German, layout = SwissQwertz }
 
 
-type alias Run =
-    { model : Hall.Model
-    , effects : List Effect
-    }
+press : String -> Run Hall.Model -> Run Hall.Model
+press keys =
+    Playthrough.sendAll (Hall.update context) (List.map (String.fromChar >> Hall.KeyPressed) (String.toList keys))
 
 
-start : Run
-start =
-    { model = Hall.init, effects = [] }
-
-
-send : Hall.Msg -> Run -> Run
-send msg run =
-    let
-        ( model, effects ) =
-            Hall.update context msg run.model
-    in
-    { model = model, effects = run.effects ++ effects }
-
-
-{-| Press keys in order; each character of the string is one key.
--}
-press : String -> Run -> Run
-press keys run =
-    String.toList keys
-        |> List.foldl (\char -> send (Hall.KeyPressed (String.fromChar char))) run
+send : Hall.Msg -> Run Hall.Model -> Run Hall.Model
+send =
+    Playthrough.send (Hall.update context)
 
 
 {-| Let time pass in 16 ms frames, long enough for any walk on this map.
 -}
-wait : Run -> Run
-wait run =
-    List.foldl (\_ -> send (Hall.Frame 16)) run (List.range 1 400)
+wait : Run Hall.Model -> Run Hall.Model
+wait =
+    Playthrough.sendAll (Hall.update context) (List.repeat 400 (Hall.Frame 16))
 
 
 {-| Read every open dialog to the end (Enter reveals, Enter continues).
 -}
-readStory : Run -> Run
-readStory run =
-    List.foldl (\_ -> send (Hall.KeyPressed "Enter")) run (List.range 1 12)
+readStory : Run Hall.Model -> Run Hall.Model
+readStory =
+    Playthrough.sendAll (Hall.update context) (List.repeat 12 (Hall.KeyPressed "Enter"))
 
 
-finishedWith : Run -> Maybe Int
-finishedWith run =
-    run.effects
-        |> List.filterMap
-            (\effect ->
-                case effect of
-                    Finish score ->
-                        Just score.tarts
-
-                    _ ->
-                        Nothing
-            )
-        |> List.head
-
-
-toasts : Run -> Int
-toasts run =
-    run.effects
-        |> List.filter
-            (\effect ->
-                case effect of
-                    ShowToast _ ->
-                        True
-
-                    _ ->
-                        False
-            )
-        |> List.length
+start : Run Hall.Model
+start =
+    Playthrough.start Hall.init
 
 
 suite : Test
@@ -104,7 +62,7 @@ suite =
                     |> press "9l5j"
                     |> wait
                     |> readStory
-                    |> finishedWith
+                    |> Playthrough.finishedWith
                     |> Expect.equal (Just 3)
         , test "walking without counts still finishes, with one tart" <|
             \_ ->
@@ -116,7 +74,7 @@ suite =
                     |> press "llllllllljjjjj"
                     |> wait
                     |> readStory
-                    |> finishedWith
+                    |> Playthrough.finishedWith
                     |> Expect.equal (Just 1)
         , test "keys pressed during the story do not move Alice" <|
             \_ ->
@@ -141,7 +99,7 @@ suite =
                     |> readStory
                     |> press "17l"
                     |> wait
-                    |> (\run -> ( finishedWith run, toasts run ))
+                    |> (\run -> ( Playthrough.finishedWith run, Playthrough.toastCount run ))
                     |> Expect.equal ( Nothing, 1 )
         , test "arrow keys show a hint instead of moving" <|
             \_ ->
@@ -149,7 +107,7 @@ suite =
                     |> readStory
                     |> send (Hall.KeyPressed "ArrowRight")
                     |> wait
-                    |> (\run -> ( run.model.alice, toasts run ))
+                    |> (\run -> ( run.model.alice, Playthrough.toastCount run ))
                     |> Expect.equal ( { x = 1, y = 10 }, 1 )
         , test "a count cannot start with 0" <|
             \_ ->

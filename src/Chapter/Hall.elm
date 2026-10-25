@@ -12,6 +12,7 @@ are requested as `Effect`s for `Main` to carry out.
 import Array exposing (Array)
 import Chapter.Contract as Contract exposing (Context, Effect(..), Sound(..))
 import Chapter.Hall.Tiles as Tiles exposing (Tile(..))
+import Chapter.Story as Story exposing (Story)
 import Html exposing (Html)
 import Html.Attributes as HA
 import Keyboard.Layout as Layout
@@ -21,8 +22,7 @@ import Speaker exposing (Speaker(..))
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 import Svg.Lazy
-import Texts exposing (Texts)
-import Ui.Dialog as Dialog exposing (Dialog)
+import Ui.Dialog as Dialog
 
 
 file : String
@@ -159,21 +159,10 @@ type alias Model =
     , hasKey : Bool
     , stepsTaken : Int
     , rabbit : Rabbit
-    , phase : Phase
-    , dialog : Maybe Dialog
+    , story : Story
     , bumpRemaining : Float
     , clock : Float
     }
-
-
-{-| Intro: story before playing. Exploring: walking around. Leaving: the
-closing story is showing. Done: the chapter has reported its score.
--}
-type Phase
-    = Intro
-    | Exploring
-    | Leaving
-    | Done
 
 
 type Direction
@@ -219,15 +208,12 @@ init =
     , hasKey = False
     , stepsTaken = 0
     , rabbit = { x = 12 * 16, y = 16, route = [ { x = 13, y = 1 }, { x = 14, y = 1 }, { x = 14, y = 0 } ], running = False }
-    , phase = Intro
-    , dialog =
-        Just
-            (Dialog.start (Dialog.say Narrator (.hall >> .intro1))
-                [ Dialog.say WhiteRabbit (.hall >> .intro2)
-                , Dialog.say Narrator (.hall >> .intro3)
-                , Dialog.say Narrator (.hall >> .intro4)
-                ]
-            )
+    , story =
+        Story.begin (Dialog.say Narrator (.hall >> .intro1))
+            [ Dialog.say WhiteRabbit (.hall >> .intro2)
+            , Dialog.say Narrator (.hall >> .intro3)
+            , Dialog.say Narrator (.hall >> .intro4)
+            ]
     , bumpRemaining = 0
     , clock = 0
     }
@@ -246,51 +232,34 @@ update : Context -> Msg -> Model -> ( Model, List Effect )
 update context msg model =
     case msg of
         KeyPressed key ->
-            case model.dialog of
-                Just dialog ->
-                    if key == "Enter" || key == " " then
-                        continueDialog context.texts dialog model
-
-                    else
-                        ( model, [] )
-
-                Nothing ->
-                    if model.phase == Exploring then
+            case Story.hear context.texts key model.story of
+                Story.NotTalking ->
+                    if Story.isPlaying model.story then
                         explore key model
 
                     else
                         ( model, [] )
+
+                Story.Swallowed ->
+                    ( model, [] )
+
+                Story.Advanced story ->
+                    ( { model | story = story }, [ PlaySound TickSound ] )
+
+                Story.IntroOver story ->
+                    ( { model | story = story, rabbit = startRunning model.rabbit }, [] )
+
+                Story.OutroOver story ->
+                    ( { model | story = story }, [ Finish (score model) ] )
 
         Frame milliseconds ->
             { model
                 | clock = model.clock + milliseconds
                 , bumpRemaining = max 0 (model.bumpRemaining - milliseconds)
                 , rabbit = moveRabbit milliseconds model.rabbit
-                , dialog = Maybe.map (Dialog.tick milliseconds) model.dialog
+                , story = Story.tick milliseconds model.story
             }
                 |> animateWalking milliseconds
-
-
-continueDialog : Texts -> Dialog -> Model -> ( Model, List Effect )
-continueDialog texts dialog model =
-    case Dialog.advance texts dialog of
-        Just next ->
-            ( { model | dialog = Just next }, [ PlaySound TickSound ] )
-
-        Nothing ->
-            let
-                closed =
-                    { model | dialog = Nothing }
-            in
-            case model.phase of
-                Intro ->
-                    ( { closed | phase = Exploring, rabbit = startRunning model.rabbit }, [] )
-
-                Leaving ->
-                    ( { closed | phase = Done }, [ Finish (score model) ] )
-
-                _ ->
-                    ( closed, [] )
 
 
 explore : String -> Model -> ( Model, List Effect )
@@ -378,7 +347,7 @@ animateWalking milliseconds model =
                 ( { model | step = Just { step | progress = progress } }, [] )
 
         Nothing ->
-            if isTalking model then
+            if Story.isTalking model.story then
                 ( model, [] )
 
             else
@@ -420,11 +389,10 @@ arrive model =
                 | hasKey = True
                 , map = setTile model.alice Floor model.map
                 , queuedSteps = []
-                , dialog =
-                    Just
-                        (Dialog.start (Dialog.say Alice (.hall >> .keyFound))
-                            [ Dialog.say Narrator (.hall >> .countLesson) ]
-                        )
+                , story =
+                    Story.tell (Dialog.say Alice (.hall >> .keyFound))
+                        [ Dialog.say Narrator (.hall >> .countLesson) ]
+                        model.story
               }
             , [ PlaySound PickupSound ]
             )
@@ -432,9 +400,8 @@ arrive model =
         CurtainFront ->
             if model.hasKey then
                 ( { model
-                    | phase = Leaving
-                    , queuedSteps = []
-                    , dialog = Just (Dialog.start (Dialog.say Narrator (.hall >> .finale)) [])
+                    | queuedSteps = []
+                    , story = Story.conclude (Dialog.say Narrator (.hall >> .finale)) []
                   }
                 , [ PlaySound PickupSound ]
                 )
@@ -460,16 +427,6 @@ neighbour direction { x, y } =
 
         Down ->
             { x = x, y = y + 1 }
-
-
-isTalking : Model -> Bool
-isTalking model =
-    case model.dialog of
-        Just _ ->
-            True
-
-        Nothing ->
-            False
 
 
 startRunning : Rabbit -> Rabbit
@@ -552,12 +509,7 @@ view context model =
                 , viewKeyHints model
                 , viewPendingCount model
                 ]
-            , case model.dialog of
-                Just dialog ->
-                    Dialog.view context.texts dialog
-
-                Nothing ->
-                    Html.text ""
+            , Story.view context.texts model.story
             ]
     , panel = viewPanel context model
     , status =
@@ -678,7 +630,7 @@ viewKeyHints : Model -> Svg msg
 viewKeyHints model =
     let
         showHints =
-            model.phase == Exploring && model.stepsTaken < stepsWithHints && model.step == Nothing && not (isTalking model)
+            Story.isPlaying model.story && model.stepsTaken < stepsWithHints && model.step == Nothing
 
         keycap ( key, direction ) =
             let

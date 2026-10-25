@@ -1,4 +1,4 @@
-module Pixel.Sprite exposing (Sprite, fromRows, view, viewAt)
+module Pixel.Sprite exposing (Sprite, fromRows, size, view, viewAt)
 
 {-| Pixel art drawn from text, one character per pixel.
 
@@ -65,6 +65,11 @@ rowRuns colorOf y row =
     String.toList row
         |> List.indexedMap Tuple.pair
         |> List.foldl step []
+
+
+size : Sprite -> { width : Int, height : Int }
+size (Sprite s) =
+    { width = s.width, height = s.height }
 
 
 {-| Draw at the origin, one SVG unit per pixel.

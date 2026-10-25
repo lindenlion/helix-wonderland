@@ -21,6 +21,7 @@ view { texts, layout, focus, flash } =
         key extraClass keyName label maybeFinger =
             Html.div
                 [ A.class "key"
+                , A.attribute "data-key" keyName
                 , A.class extraClass
                 , A.class (maybeFinger |> Maybe.map fingerClass |> Maybe.withDefault "f8")
                 , A.classList

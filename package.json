@@ -1,6 +1,6 @@
 {
   "name": "helix-wonderland",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Learn the Helix editor and ten-finger typing in Alice's Wonderland. Elm.",
   "scripts": {
     "build": "node tools/build.mjs",

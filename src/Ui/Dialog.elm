@@ -102,10 +102,31 @@ portrait speaker =
 
                 WhiteRabbit ->
                     Just Sprites.whiteRabbit
+
+                Caterpillar ->
+                    Just Sprites.caterpillar
+
+                Mouse ->
+                    Just Sprites.mouse
     in
     case sprite of
         Just s ->
-            Svg.svg [ SA.class "dialog-portrait", SA.viewBox "-2 0 16 16" ] [ Sprite.view s ]
+            Svg.svg [ SA.class "dialog-portrait", SA.viewBox (centredSquare (Sprite.size s)) ] [ Sprite.view s ]
 
         Nothing ->
             Html.text ""
+
+
+{-| A square viewBox with the sprite in its middle, so portraits of any
+shape fill the same box.
+-}
+centredSquare : { width : Int, height : Int } -> String
+centredSquare { width, height } =
+    let
+        side =
+            max width height
+
+        offset length =
+            String.fromFloat (toFloat (length - side) / 2)
+    in
+    String.join " " [ offset width, offset height, String.fromInt side, String.fromInt side ]

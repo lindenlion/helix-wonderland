@@ -1,4 +1,4 @@
-module Chapter.Id exposing (ChapterId(..), all, isPorted, next, number, toKey)
+module Chapter.Id exposing (ChapterId(..), all, next, number, previous, toKey)
 
 {-| The chapters of the game, in playing order.
 -}
@@ -9,12 +9,12 @@ type ChapterId
     | HallOfDoors
     | DrinkMe
     | PoolOfTears
-    | Caterpillar
+    | CaterpillarsAdvice
 
 
 all : List ChapterId
 all =
-    [ RabbitHole, HallOfDoors, DrinkMe, PoolOfTears, Caterpillar ]
+    [ RabbitHole, HallOfDoors, DrinkMe, PoolOfTears, CaterpillarsAdvice ]
 
 
 {-| 1-based, as shown on the title screen.
@@ -34,7 +34,7 @@ number id =
         PoolOfTears ->
             4
 
-        Caterpillar ->
+        CaterpillarsAdvice ->
             5
 
 
@@ -55,19 +55,19 @@ toKey id =
         PoolOfTears ->
             "pool-of-tears"
 
-        Caterpillar ->
+        CaterpillarsAdvice ->
             "caterpillar"
-
-
-{-| Chapters already rebuilt in Elm. The others still live in the prototype.
--}
-isPorted : ChapterId -> Bool
-isPorted id =
-    id == HallOfDoors
 
 
 next : ChapterId -> Maybe ChapterId
 next id =
     all
         |> List.filter (\other -> number other == number id + 1)
+        |> List.head
+
+
+previous : ChapterId -> Maybe ChapterId
+previous id =
+    all
+        |> List.filter (\other -> number other == number id - 1)
         |> List.head

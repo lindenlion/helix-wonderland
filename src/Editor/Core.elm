@@ -1,7 +1,7 @@
 module Editor.Core exposing
     ( Buffer, Mode(..), Command(..)
     , fromString, apply
-    , toString, mode, head, selectionRange, selectedText, cursorLineColumn
+    , toString, mode, head, selectionRange, selectedText, wordUnderCursor, cursorLineColumn
     )
 
 {-| A small, pure model of the Helix editor: text, one selection, two modes.
@@ -24,7 +24,7 @@ the character at `head`.
 
 @docs Buffer, Mode, Command
 @docs fromString, apply
-@docs toString, mode, head, selectionRange, selectedText, cursorLineColumn
+@docs toString, mode, head, selectionRange, selectedText, wordUnderCursor, cursorLineColumn
 
 -}
 
@@ -151,6 +151,24 @@ selectedText ((Buffer b) as buffer) =
             selectionRange buffer
     in
     String.fromList (Array.toList (Array.slice first (last + 1) b.chars))
+
+
+{-| The whole word the cursor sits in, or `""` when it is not on a word.
+-}
+wordUnderCursor : Buffer -> String
+wordUnderCursor (Buffer b) =
+    if isClass b.chars Word b.head then
+        let
+            first =
+                scanBackward (isClass b.chars Word) b.head + 1
+
+            afterLast =
+                scanForward (isClass b.chars Word) b.head
+        in
+        String.fromList (Array.toList (Array.slice first afterLast b.chars))
+
+    else
+        ""
 
 
 {-| 1-based line and column of the cursor, as shown in Helix's status line.
@@ -522,7 +540,7 @@ classAt chars position =
 
 
 {-| Letters, digits and underscore form words. Every non-ASCII character
-counts as a letter too, so words like "Tränen" or "gießt" stay whole.
+counts as a letter too, so words like "Tränen" or "Lücke" stay whole.
 -}
 classify : Char -> CharClass
 classify char =

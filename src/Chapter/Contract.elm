@@ -40,6 +40,7 @@ type Sound
     | BumpSound
     | PickupSound
     | TickSound
+    | CorrectSound
     | ErrorSound
 
 
@@ -59,6 +60,9 @@ soundName sound =
 
         TickSound ->
             "tick"
+
+        CorrectSound ->
+            "correct"
 
         ErrorSound ->
             "error"

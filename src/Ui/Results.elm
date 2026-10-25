@@ -16,7 +16,7 @@ view :
     { texts : Texts
     , chapter : ChapterId
     , score : Score
-    , onNext : Maybe msg
+    , onNext : msg
     , onReplay : msg
     , onMenu : msg
     }
@@ -37,10 +37,8 @@ view { texts, chapter, score, onNext, onReplay, onMenu } =
         , Html.div [ A.class "stats" ]
             (List.map (\stat -> Html.span [] [ Html.text (stat.label texts), Html.b [] [ Html.text (stat.value texts) ] ]) score.stats)
         , Html.div [ A.class "actions" ]
-            (List.filterMap identity
-                [ Maybe.map (\msg -> button "primary" msg texts.results.next "Enter") onNext
-                , Just (button "" onReplay texts.results.replay "r")
-                , Just (button "" onMenu texts.results.menu "m")
-                ]
-            )
+            [ button "primary" onNext texts.results.next "Enter"
+            , button "" onReplay texts.results.replay "r"
+            , button "" onMenu texts.results.menu "m"
+            ]
         ]
